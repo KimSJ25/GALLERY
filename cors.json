@@ -1,18 +1,20 @@
 {
   "rules": [
     {
-      "allowedOrigins": [
-        "http://localhost:3000"
-      ],
-      "allowedMethods": [
-        "GET",
-        "PUT",
-        "POST",
-        "DELETE"
-      ],
-      "allowedHeaders": [
-        "*"
-      ]
+      "allowed": {
+        "origins": [
+          "http://localhost:3000"
+        ],
+        "methods": [
+          "GET",
+          "PUT",
+          "POST",
+          "DELETE"
+        ],
+        "headers": [
+          "*"
+        ]
+      }
     }
   ]
 }
