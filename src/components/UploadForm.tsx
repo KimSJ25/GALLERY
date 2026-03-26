@@ -2,19 +2,21 @@
 
 import { useState } from "react";
 import exifr from "exifr";
+import { savePhotoMetadata } from "@/src/app/actions/photo";
 
 export default function UploadForm() {
   const [file, setFile] = useState<File | null>(null);
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   const [message, setMessage] = useState("");
-  const [exifInfo, setExifInfo] = useState<any>(null); // 추출된 EXIF 정보를 담을 상태
+  const [exifInfo, setExifInfo] = useState<any>(null);
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const selectedFile = e.target.files[0];
       setFile(selectedFile);
       
-      // 파일이 선택되자마자 EXIF 데이터 추출
       try {
         const parsedExif = await exifr.parse(selectedFile);
         if (parsedExif) {
@@ -25,20 +27,18 @@ export default function UploadForm() {
             aperture: parsedExif.FNumber ? `f/${parsedExif.FNumber}` : undefined,
           };
           setExifInfo(extracted);
-          console.log("추출된 EXIF 정보:", extracted);
         } else {
           setExifInfo(null);
         }
       } catch (error) {
-        console.error("EXIF 추출 실패:", error);
         setExifInfo(null);
       }
     }
   };
 
   const handleUpload = async () => {
-    if (!file) {
-      setMessage("업로드할 사진을 선택해주세요.");
+    if (!file || !title) {
+      setMessage("사진과 작품명을 모두 입력해주세요.");
       return;
     }
 
@@ -46,7 +46,7 @@ export default function UploadForm() {
     setMessage("업로드 준비 중...");
 
     try {
-      // 1. 서버(Next.js API)에 Presigned URL 발급 요청
+      // 1. Presigned URL 발급
       const res = await fetch("/api/upload", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -54,55 +54,75 @@ export default function UploadForm() {
       });
 
       if (!res.ok) throw new Error("URL 발급 실패");
-      
       const { url, key } = await res.json();
 
-      // 2. 발급받은 URL을 사용하여 R2로 다이렉트 업로드 (PUT 요청)
+      // 2. R2로 다이렉트 업로드
       setMessage("R2 스토리지에 원본 사진 전송 중...");
       const uploadRes = await fetch(url, {
         method: "PUT",
-        headers: {
-          "Content-Type": file.type,
-        },
+        headers: { "Content-Type": file.type },
         body: file,
       });
 
       if (!uploadRes.ok) throw new Error("R2 업로드 실패");
 
-      setMessage(`업로드 성공! (저장된 키: ${key})`);
+      setMessage("데이터베이스에 메타데이터 기록 중...");
       
-      // TODO: 발급받은 key와 exifInfo를 D1 데이터베이스에 저장하는 로직 추가
+      // 3. 서버 액션을 호출하여 D1 DB에 정보 저장
+      const dbRes = await savePhotoMetadata({
+        title,
+        description,
+        r2Key: key,
+        fileSize: file.size,
+        exifInfo,
+      });
+
+      if (!dbRes.success) throw new Error("DB 저장 실패");
+
+      setMessage("🎉 업로드 및 DB 저장 완료!");
       
+      // 입력 폼 초기화
+      setFile(null);
+      setTitle("");
+      setDescription("");
+      setExifInfo(null);
+
     } catch (error) {
       console.error(error);
-      setMessage("업로드 중 오류가 발생했습니다.");
+      setMessage("업로드 과정에서 오류가 발생했습니다.");
     } finally {
       setIsUploading(false);
-      setFile(null); // 업로드 완료 후 파일 초기화 (선택적)
     }
   };
 
   return (
     <div className="bg-neutral-900 p-6 rounded-lg border border-neutral-800">
       <h2 className="text-xl font-semibold text-white mb-4">작품 업로드</h2>
-      <p className="text-sm text-neutral-400 mb-6">
-        고해상도 원본(15MB 이상)의 직접 업로드를 지원하며, 메타데이터를 자동 추출합니다.
-      </p>
+      
+      <div className="flex flex-col gap-5">
+        <input
+          type="text"
+          placeholder="작품명"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className="w-full bg-neutral-800 text-white border border-neutral-700 rounded-md p-2 text-sm focus:outline-none focus:border-neutral-500"
+        />
 
-      <div className="flex flex-col gap-4">
+        <textarea
+          placeholder="작품 설명 및 작가의 의도"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={3}
+          className="w-full bg-neutral-800 text-white border border-neutral-700 rounded-md p-2 text-sm focus:outline-none focus:border-neutral-500 resize-none"
+        />
+
         <input
           type="file"
           accept="image/*"
           onChange={handleFileChange}
-          className="block w-full text-sm text-neutral-400
-            file:mr-4 file:py-2 file:px-4
-            file:rounded-md file:border-0
-            file:text-sm file:font-semibold
-            file:bg-neutral-800 file:text-white
-            hover:file:bg-neutral-700 cursor-pointer"
+          className="block w-full text-sm text-neutral-400 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-neutral-800 file:text-white hover:file:bg-neutral-700 cursor-pointer"
         />
         
-        {/* 추출된 EXIF 정보 미리보기 */}
         {exifInfo && (
           <div className="bg-neutral-800 p-3 rounded text-sm text-neutral-300 font-mono">
             <p>카메라: {exifInfo.model}</p>
@@ -114,15 +134,13 @@ export default function UploadForm() {
 
         <button
           onClick={handleUpload}
-          disabled={!file || isUploading}
-          className="px-4 py-2 bg-white text-black font-semibold rounded-md hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          disabled={!file || !title || isUploading}
+          className="px-4 py-3 bg-white text-black font-semibold rounded-md hover:bg-neutral-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
-          {isUploading ? "업로드 진행 중..." : "R2에 업로드하기"}
+          {isUploading ? "처리 중..." : "작품 등록하기"}
         </button>
 
-        {message && (
-          <p className="text-sm mt-2 text-neutral-300">{message}</p>
-        )}
+        {message && <p className="text-sm mt-1 text-neutral-300">{message}</p>}
       </div>
     </div>
   );
