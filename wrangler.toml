@@ -1,0 +1,13 @@
+name = "gallery"
+compatibility_date = "2024-03-24"
+
+# Cloudflare R2 스토리지 연결 [cite: 11, 14]
+[[r2_buckets]]
+binding = "GALLERY_BUCKET"
+bucket_name = "gallery-photos"
+
+# Cloudflare D1 데이터베이스 연결 [cite: 11]
+[[d1_databases]]
+binding = "DB"
+database_name = "exhibition-db"
+database_id = "957fd846-af7b-4a70-b937-8978caf0bba7"
