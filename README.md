@@ -5,13 +5,15 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 First, run the development server:
 
 ```bash
+git clone <repository>
+
+npm run setup (의존성 설치 및 .env 복사)
+
+.env.local에 본인의 R2/D1 키 입력
+
+npm run db:push (로컬 DB 파일 및 테이블 생성)
+
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
